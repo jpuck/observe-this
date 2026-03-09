@@ -1,0 +1,47 @@
+# The OTel Collector is a vendor-neutral proxy that:
+#   1. Receives telemetry from apps (OTLP protocol)
+#   2. Processes it (batching, filtering, enrichment)
+#   3. Exports it to one or more backends
+#
+# This decouples your app from its observability backends.
+# Swap Prometheus for Datadog? Change the exporter here, not the app.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317   # apps send here
+      http:
+        endpoint: 0.0.0.0:4318   # HTTP alternative
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  # Exposes metrics in Prometheus format — Prometheus scrapes this endpoint.
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+  # Forwards traces to Tempo using OTLP.
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]
+
+  telemetry:
+    logs:
+      level: warn

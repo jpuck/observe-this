@@ -11,9 +11,11 @@ scrape_configs:
     static_configs:
       - targets: ["node-exporter:9100"]
 
+  # App metrics are no longer scraped from the app directly.
+  # The OTel Collector receives them via OTLP and re-exposes them in Prometheus format.
   - job_name: "node-app"
     static_configs:
-      - targets: ["app:3000"]
+      - targets: ["otel-collector:8889"]
 
   - job_name: "nginx"
     static_configs:

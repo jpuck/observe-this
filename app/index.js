@@ -1,37 +1,37 @@
 const express = require("express");
-const client = require("prom-client");
+const { metrics } = require("@opentelemetry/api");
 
 const app = express();
-const register = client.register;
 
-// Collect default Node.js metrics (memory, GC, event loop lag, etc.)
-client.collectDefaultMetrics({ register });
+// Get a Meter from the global MeterProvider initialized in tracing.js.
+// This is the OTel equivalent of `new prom-client.Counter(...)`.
+const meter = metrics.getMeter("node-app", "1.0.0");
 
-const httpRequestsTotal = new client.Counter({
-  name: "http_requests_total",
-  help: "Total number of HTTP requests",
-  labelNames: ["method", "route", "status_code"],
-  registers: [register],
+// Manual counter — supplements the auto-instrumented http.server.request.duration histogram.
+// Useful for business-level counting with custom attributes.
+const requestCounter = meter.createCounter("app.requests", {
+  description: "Total number of HTTP requests handled",
 });
 
-const httpRequestDuration = new client.Histogram({
-  name: "http_request_duration_seconds",
-  help: "Duration of HTTP requests in seconds",
-  labelNames: ["method", "route", "status_code"],
-  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
-  registers: [register],
+// Manual histogram — tracks request duration with our own bucket boundaries.
+const requestDuration = meter.createHistogram("app.request.duration", {
+  description: "HTTP request duration in seconds",
+  unit: "s",
+  advice: {
+    explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+  },
 });
 
 app.use((req, res, next) => {
-  const end = httpRequestDuration.startTimer();
+  const start = Date.now();
   res.on("finish", () => {
-    const labels = {
-      method: req.method,
-      route: req.route ? req.route.path : req.path,
-      status_code: res.statusCode,
+    const attrs = {
+      "http.method": req.method,
+      "http.route": req.route ? req.route.path : req.path,
+      "http.status_code": String(res.statusCode),
     };
-    httpRequestsTotal.inc(labels);
-    end(labels);
+    requestCounter.add(1, attrs);
+    requestDuration.record((Date.now() - start) / 1000, attrs);
   });
   next();
 });
@@ -40,10 +40,8 @@ app.get("/", (req, res) => {
   res.send("Hello World");
 });
 
-app.get("/metrics", async (req, res) => {
-  res.set("Content-Type", register.contentType);
-  res.end(await register.metrics());
-});
+// No /metrics endpoint — metrics are pushed to the OTel Collector via OTLP,
+// not scraped directly. Prometheus scrapes the Collector at port 8889 instead.
 
 const PORT = 3000;
 app.listen(PORT, () => {
