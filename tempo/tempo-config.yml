@@ -6,14 +6,7 @@ distributor:
     otlp:
       protocols:
         grpc:
-          endpoint: 0.0.0.0:4317   # receives traces from the OTel Collector
-
-ingester:
-  max_block_duration: 5m
-
-compactor:
-  compaction:
-    block_retention: 1h   # keep traces for 1 hour (learning environment)
+          endpoint: 0.0.0.0:4317
 
 storage:
   trace:
