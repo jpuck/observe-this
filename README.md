@@ -180,7 +180,7 @@ Open http://localhost:9090 → Query → Graph tab.
 |------|-----------|---------|
 | **Counter** | Only goes up, resets on restart | `app_requests_total` |
 | **Gauge** | Can go up or down | `node_memory_MemAvailable_bytes` |
-| **Histogram** | Samples bucketed by value | `app_request_duration_seconds` |
+| **Histogram** | Samples bucketed by value | `app_request_duration_seconds_bucket` (histograms have no base metric — only `_bucket`, `_count`, `_sum`) |
 
 ### 3.2 Two sources of app metrics
 
@@ -188,8 +188,10 @@ With OTel you get metrics from two places:
 
 **Auto-instrumented** (from the OTel HTTP instrumentation):
 ```promql
-# Request duration histogram — created automatically, no code required
-rate(http_server_request_duration_seconds_count[5m])
+# Request duration histogram — created automatically, no code required.
+# Named http_server_duration_milliseconds in OTel instrumentation v0.52 (older semconv).
+# Newer versions use http_server_request_duration_seconds — check yours at localhost:8889/metrics.
+rate(http_server_duration_milliseconds_count[5m])
 ```
 
 **Manual** (from the middleware in `index.js`):
@@ -231,10 +233,13 @@ histogram_quantile(0.95,
   sum(rate(app_request_duration_seconds_bucket[5m])) by (le)
 )
 
-# Same from auto-instrumented histogram
+# Auto-instrumented histogram (milliseconds — result is in ms, not seconds)
 histogram_quantile(0.95,
-  sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le)
+  sum(rate(http_server_duration_milliseconds_bucket[5m])) by (le)
 )
+
+# Also note: auto-instrumentation misattributes unmatched routes to "/" —
+# manual instrumentation (above) correctly captures the actual path (e.g. "/not-found")
 
 # Per-route p99
 histogram_quantile(0.99,
@@ -507,7 +512,7 @@ OTel's log bridge API, which is the natural next step once you've outgrown this 
 | Request rate | `rate(app_requests_total[5m])` |
 | Error rate | `rate(app_requests_total{http_status_code=~"4.."}[5m])` |
 | p95 latency | `histogram_quantile(0.95, sum(rate(app_request_duration_seconds_bucket[5m])) by (le))` |
-| Auto-instrumented duration | `histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le))` |
+| Auto-instrumented duration (ms) | `histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket[5m])) by (le))` |
 | nginx request rate | `rate(nginx_http_requests_total[5m])` |
 | Host memory % free | `node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100` |
 
