@@ -264,14 +264,27 @@ histogram_quantile(0.99,
 
 ### 3.5 Nginx and host metrics
 
+Notice that memory is queried raw without `rate()`. This is because
+`node_memory_MemAvailable_bytes` is a **gauge** — it represents the current value
+of something that can go up or down, so the raw value is already meaningful.
+`rate()` only applies to counters (cumulative totals) and histogram buckets (which
+are counters under the hood). Applying `rate()` to a gauge would give you
+"how fast is available memory changing per second" — not useful.
+
+| Type | Query pattern |
+|------|--------------|
+| Counter | `rate(metric[5m])` — raw value is a useless ever-growing total |
+| Gauge | `metric` raw — current value is already the meaningful state |
+| Histogram | `histogram_quantile(...rate(..._bucket[5m])...)` — buckets are counters |
+
 ```promql
-# nginx request rate
+# nginx request rate (counter — needs rate())
 rate(nginx_http_requests_total[5m])
 
-# Host memory available
+# Host memory available (gauge — query raw)
 node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
 
-# CPU usage
+# CPU usage (counter — needs rate())
 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
 ```
 
