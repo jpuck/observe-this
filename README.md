@@ -124,6 +124,18 @@ without depending on any specific backend. App owners configure the SDK to decid
 
 **Auto-instrumentation** (zero code changes):
 
+`tracing.js` is loaded by Node.js itself before `index.js` runs, via the `--require`
+flag in the Dockerfile:
+
+```dockerfile
+CMD ["node", "--require", "./tracing.js", "index.js"]
+```
+
+`--require` is a Node.js built-in that executes a file before the main entry point.
+This is critical for auto-instrumentation: OTel needs to patch modules like `express`
+and `http` before they are first `require()`'d by `index.js`. Using `--require`
+enforces that ordering at the process level rather than relying on import order in code.
+
 `tracing.js` loads `getNodeAutoInstrumentations()`, which patches Node.js modules
 at startup. For every incoming HTTP request, the OTel HTTP and Express
 instrumentations automatically create a span with timing, status code, route, etc.
