@@ -29,7 +29,7 @@ nginx:80 ───────────────────────�
     ▼                                         JSON access logs
 app:3000 (Express)                                 │
     │                                              ▼
-    │ OTLP/gRPC                              promtail
+    │ OTLP/gRPC                              alloy
     ▼                                              │
 otel-collector:4317                                ▼
     │                                         loki:3100
@@ -66,6 +66,7 @@ Collector config, not the application code.
 | Prometheus | http://localhost:9090 | Metrics storage |
 | Tempo | http://localhost:3200 | Trace storage |
 | Loki | http://localhost:3100 | Log storage |
+| Alloy | — | Log collector (replaced EOL Promtail) |
 | Grafana | http://localhost:3001 | Dashboards (admin/admin) |
 | node-exporter | http://localhost:9100 | Host metrics |
 | nginx-exporter | http://localhost:9113 | nginx metrics |
@@ -153,7 +154,7 @@ receivers → processors → exporters
 - **exporters**: Prometheus format on port 8889; OTLP to Tempo on port 4317
 
 The `service.pipelines` section wires them together separately for metrics and traces.
-You could add a `logs` pipeline here to receive OTel logs too (we use Promtail instead).
+You could add a `logs` pipeline here to receive OTel logs too (we use Alloy instead).
 
 ### 2.4 Environment-based configuration
 
@@ -268,7 +269,7 @@ node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100
 
 Open http://localhost:3001 → Explore → select **Loki** as the data source.
 
-Promtail collects stdout from all containers via the Docker socket and attaches labels:
+**Grafana Alloy** (the successor to the now-EOL Promtail) collects stdout from all containers via the Docker socket and attaches labels:
 - `service` — docker-compose service name (`nginx`, `app`, `prometheus`, ...)
 - `container` — container name
 - `stream` — `stdout` or `stderr`
