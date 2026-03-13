@@ -422,6 +422,36 @@ When a request hits `app:3000`, OTel creates spans with:
 
 No `console.log` required. No manual span creation needed.
 
+### 5.5 Trace context propagation
+
+When a request arrives at nginx from an external caller that already has a trace ID
+(e.g. a browser with OTel instrumentation, or another service), nginx forwards those
+IDs to the app via the **W3C TraceContext** headers:
+
+```
+traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+                  └─────── trace ID ──────────────┘ └─ span ID ─┘
+tracestate:  vendor-specific additional state (optional)
+```
+
+This is configured in `nginx/nginx.conf`:
+
+```nginx
+proxy_set_header traceparent $http_traceparent;
+proxy_set_header tracestate  $http_tracestate;
+```
+
+Without these headers, a trace originating upstream would appear as two disconnected
+traces in Tempo — one for the upstream caller and one starting fresh at the app.
+With them, the app's OTel SDK reads the incoming `traceparent`, continues the same
+trace, and its spans appear as children of the upstream span in a single waterfall.
+
+For requests that originate at nginx itself (e.g. a browser with no existing trace),
+there is no incoming `traceparent`, so the app starts a new root trace as normal.
+To have nginx generate its own spans and participate as a full trace node, you would
+need the [OpenTelemetry nginx module](https://github.com/open-telemetry/opentelemetry-cpp-contrib/tree/main/instrumentation/nginx),
+which is a separate installation step beyond this learning setup.
+
 ---
 
 ## Lesson 6: Grafana — Unified Dashboards
