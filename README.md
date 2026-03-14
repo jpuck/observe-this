@@ -559,6 +559,146 @@ OTel's log bridge API, which is the natural next step once you've outgrown this 
 
 ---
 
+## Lesson 8: Building a Host Metrics Dashboard
+
+node-exporter collects metrics from the **host machine**, not the Docker container.
+This is worth understanding before building dashboards around it.
+
+Look at the volume mounts in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - /proc:/host/proc:ro
+  - /sys:/host/sys:ro
+  - /:/rootfs:ro
+```
+
+On Linux, `/proc` is where the kernel exposes everything about the running system —
+CPU usage, memory, network stats, disk I/O. node-exporter mounts the host's `/proc`
+directly into the container (hence `--path.procfs=/host/proc`) rather than reading
+its own container's `/proc`, which would only show the container's isolated view.
+
+So `node_memory_MemAvailable_bytes` tells you how much RAM your actual server has
+free — not how much the node-exporter container has been allocated.
+
+### 8.1 Memory
+
+Memory is a **gauge** — query it raw, no `rate()` needed.
+
+```promql
+# % used — this is the right panel for a "memory pressure" dashboard
+(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100
+```
+
+**`MemAvailable` vs `MemFree`:** these are different things and the distinction matters.
+`MemFree` is RAM with literally nothing in it. `MemAvailable` is the kernel's estimate
+of how much memory could be reclaimed for a new application — it includes memory
+currently used for disk cache and buffers that can be freed on demand. Linux
+aggressively uses spare RAM for caching, so `MemFree` is almost always near zero and
+looks alarming without being a real problem. Always use `MemAvailable`.
+
+**Reading the query:** if Prometheus shows ~80 for the available-based query
+(`node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100`), that means
+80% is *free* — not 80% used. The used query above inverts this, giving you the
+number that matches what htop shows in the `Mem` bar.
+
+**What to watch for:** memory used % trending upward over hours or days is a slow
+memory leak. A sudden spike is usually a new process starting or a traffic burst.
+
+### 8.2 CPU
+
+CPU time is broken into modes by the kernel. `node_cpu_seconds_total` is a counter
+(time spent in each mode), so use `rate()`.
+
+```promql
+# Overall usage across all cores — inverse of idle time
+100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+# Broken out by mode to see where time is going
+avg by (mode) (rate(node_cpu_seconds_total[5m])) * 100
+```
+
+**CPU modes worth knowing:**
+
+| Mode | Meaning | High value means... |
+|------|---------|-------------------|
+| `user` | Running application code | App is CPU-bound |
+| `system` | Running kernel code | Lots of syscalls (I/O, networking) |
+| `iowait` | CPU idle, waiting on disk | Disk is the bottleneck |
+| `steal` | Time stolen by hypervisor | You're on a noisy cloud neighbour |
+| `idle` | Doing nothing | System has headroom |
+
+`iowait` is particularly diagnostic — high iowait means your CPU isn't busy
+computing, it's just waiting for disk reads/writes to complete.
+
+### 8.3 Disk space and I/O
+
+```promql
+# Disk space used as a percentage (gauge — query raw)
+(node_filesystem_size_bytes - node_filesystem_free_bytes)
+  / node_filesystem_size_bytes * 100
+
+# Read/write throughput in bytes per second (counter — needs rate())
+rate(node_disk_read_bytes_total[5m])
+rate(node_disk_written_bytes_total[5m])
+```
+
+**What to watch for:** disk space is a slow-moving gauge that tends to be ignored
+until it hits 100% and takes down the system. Alert at 80%. Disk I/O rate spikes
+that correlate with high `iowait` CPU confirm a disk bottleneck.
+
+### 8.4 Network
+
+```promql
+# Bytes received/transmitted per second per interface (counter — needs rate())
+rate(node_network_receive_bytes_total[5m])
+rate(node_network_transmit_bytes_total[5m])
+```
+
+Filter out loopback and virtual interfaces if they're noisy:
+```promql
+rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[5m])
+```
+
+### 8.5 System load
+
+```promql
+# Load average normalized by number of CPU cores
+# Above 1.0 means more work is queued than can be processed
+node_load1 / count without (cpu, mode) (node_cpu_seconds_total{mode="idle"})
+```
+
+`node_load1` is the 1-minute load average — a measure of how many processes are
+waiting to run. Dividing by core count gives you a ratio: above 1.0 means the
+system is overloaded, below 1.0 means it has headroom.
+
+There are also `node_load5` and `node_load15` for 5 and 15-minute averages. A spike
+in `node_load1` that doesn't appear in `node_load15` is a short burst. All three
+elevated together means sustained pressure.
+
+### 8.6 Building the dashboard in Grafana
+
+1. Dashboards → New → New dashboard
+2. Add a panel for each category below — one stat or graph per row:
+
+| Panel | Query | Visualization |
+|-------|-------|--------------|
+| Memory used % | `(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100` | Gauge (0–100, threshold at 85%) |
+| CPU usage % | `100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)` | Time series |
+| CPU by mode | `avg by (mode) (rate(node_cpu_seconds_total[5m])) * 100` | Time series stacked |
+| Disk space % | `(node_filesystem_size_bytes - node_filesystem_free_bytes) / node_filesystem_size_bytes * 100` | Gauge (0–100) |
+| Disk I/O | `rate(node_disk_read_bytes_total[5m])` + `rate(node_disk_written_bytes_total[5m])` | Time series |
+| Network traffic | `rate(node_network_receive_bytes_total{device!~"lo|docker.*"}[5m])` | Time series |
+| System load ratio | `node_load1 / count without(cpu,mode)(node_cpu_seconds_total{mode="idle"})` | Stat (threshold at 1.0) |
+
+**Thresholds worth setting in Grafana:**
+- Memory used > 85% → yellow, > 95% → red
+- CPU usage > 80% sustained → yellow
+- Disk space > 80% → yellow, > 90% → red
+- Load ratio > 1.0 → yellow, > 2.0 → red
+
+---
+
 ## Cheat Sheet
 
 ### Prometheus
