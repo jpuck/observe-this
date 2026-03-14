@@ -500,7 +500,35 @@ PromQL. Look for the Code/Builder toggle in the top-right corner of the query ro
    ```
 6. Save the dashboard. Use the refresh interval dropdown (top right) to auto-refresh.
 
-### 6.3 Variables for dynamic dashboards
+### 6.3 Backing up and versioning dashboards
+
+The `grafana_data` Docker volume stores Grafana's internal SQLite database — user
+accounts, settings, and any dashboards created via the UI. It is runtime state, not
+a backup. If the volume is lost, everything built in the UI is gone.
+
+**The right approach: provisioned dashboards.**
+Grafana can load dashboards from JSON files on disk at startup, using the same
+provisioning mechanism as data sources. This stack is already wired up for it —
+drop a dashboard JSON file into `grafana/provisioning/dashboards/` and it will
+appear in Grafana automatically on next restart. The dashboard lives in git
+alongside the rest of the stack, making the volume disposable.
+
+**To save a dashboard to the repo:**
+1. Build and save the dashboard in the Grafana UI
+2. Open it → Dashboard Settings (gear icon) → JSON Model
+3. Copy the JSON and save it as a `.json` file in `grafana/provisioning/dashboards/`
+4. Commit it to git
+
+**To restore on a new system or after volume loss:**
+```bash
+docker compose up -d   # provisioned dashboards load automatically on first boot
+```
+
+**Trade-off:** provisioned dashboards are read-only in the UI by default. To edit
+one, modify the JSON file and restart Grafana — the file is the source of truth,
+not whatever was last clicked. This is the right constraint for a reproducible setup.
+
+### 6.4 Variables for dynamic dashboards
 
 In dashboard Settings → Variables → Add variable:
 - Type: **Query**, Data source: **Prometheus**
