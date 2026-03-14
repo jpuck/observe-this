@@ -458,6 +458,20 @@ which is a separate installation step beyond this learning setup.
 
 Open http://localhost:3001 (admin / admin).
 
+### 6.0 Grafana vs the Prometheus UI
+
+Once Grafana is running, you'll rarely need the Prometheus UI at http://localhost:9090
+for day-to-day work. Everything you actually care about — graphs, dashboards, alerts,
+and cross-signal correlation — lives in Grafana. The Prometheus UI is an
+operator/debugging tool, not a monitoring tool. The cases where it's still useful:
+
+| Task | Why Prometheus UI, not Grafana |
+|------|-------------------------------|
+| `http://localhost:9090/targets` | Shows scrape health — which targets are UP/DOWN, last scrape time, error messages |
+| `http://localhost:9090/config` | Inspect the live running config to verify a reload took effect |
+| Metric name hunting | Autocomplete and raw metric browsing when you don't know the exact name yet |
+| Query debugging | The **Explain** tab breaks down a PromQL expression step by step |
+
 ### 6.1 Explore mode
 
 Explore (compass icon in left sidebar) is for ad-hoc investigation — no saved dashboards needed.
@@ -465,8 +479,13 @@ Switch data sources in the top-left dropdown to move between Prometheus, Loki, a
 
 ### 6.2 Building a dashboard
 
+Grafana's query editor has two modes — **Builder** (a form-based visual editor) and
+**Code** (plain PromQL text input). Builder wraps free-form expressions as metric name
+literals, which causes parse errors. Always switch to **Code** mode before pasting
+PromQL. Look for the Code/Builder toggle in the top-right corner of the query row.
+
 1. Dashboards → New → New dashboard → Add visualization
-2. Select **Prometheus**, enter:
+2. Select **Prometheus**, switch to **Code** mode, enter:
    ```promql
    sum(rate(app_requests_total[5m])) by (http_status_code)
    ```
