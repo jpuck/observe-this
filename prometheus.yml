@@ -9,7 +9,7 @@ scrape_configs:
 
   - job_name: "node-exporter"
     static_configs:
-      - targets: ["node-exporter:9100"]
+      - targets: ["host.docker.internal:9100"]  # host network mode — not on Docker bridge
 
   # App metrics are no longer scraped from the app directly.
   # The OTel Collector receives them via OTLP and re-exposes them in Prometheus format.

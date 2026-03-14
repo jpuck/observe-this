@@ -2,6 +2,8 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # resolves to host IP so Prometheus can scrape node-exporter on host network
     ports:
       - "9090:9090"
     volumes:
@@ -17,8 +19,7 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
-    ports:
-      - "9100:9100"
+    network_mode: host  # shares host network namespace so node-exporter sees real interfaces (eth0, wlan0, etc.) not just the container veth
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
