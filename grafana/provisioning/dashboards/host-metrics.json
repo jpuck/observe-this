@@ -793,7 +793,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(node_disk_read_bytes_total[5m])",
+          "expr": "rate(node_disk_read_bytes_total{device=~\"sd[a-z]+$|nvme[0-9]+n[0-9]+$|vd[a-z]+$\"}[5m])",
           "legendFormat": "Read {{device}}",
           "refId": "A"
         },
@@ -802,7 +802,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(node_disk_written_bytes_total[5m])",
+          "expr": "rate(node_disk_written_bytes_total{device=~\"sd[a-z]+$|nvme[0-9]+n[0-9]+$|vd[a-z]+$\"}[5m])",
           "legendFormat": "Write {{device}}",
           "refId": "B"
         }
