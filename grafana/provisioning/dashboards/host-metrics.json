@@ -216,11 +216,96 @@
       }
     },
     {
+      "id": 8,
+      "title": "Filesystem Details",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by (mountpoint) (node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"} - node_filesystem_free_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"})",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by (mountpoint) (node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"})",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "B",
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max by (mountpoint) ((node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"} - node_filesystem_free_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"}) / node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\",mountpoint!~\"/tmp/.*\"} * 100)",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "C",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "mountpoint", "mode": "outer" } },
+        {
+          "id": "filterFieldsByName",
+          "options": { "include": { "pattern": "^(mountpoint|Value.*)$" } }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": {
+              "mountpoint": "Mountpoint",
+              "Value #A": "Used",
+              "Value #B": "Total",
+              "Value #C": "Used %"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "text" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Used" },
+            "properties": [{ "id": "unit", "value": "bytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Total" },
+            "properties": [{ "id": "unit", "value": "bytes" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Used %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 1 },
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "color", "value": { "mode": "thresholds" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 80 },
+                    { "color": "red", "value": 90 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } }
+    },
+    {
       "id": 7,
       "title": "Network Traffic",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
