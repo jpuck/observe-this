@@ -155,7 +155,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "(node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"} - node_filesystem_free_bytes{fstype!~\"tmpfs|overlay|squashfs\"}) / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"} * 100",
+          "expr": "(node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\"} - node_filesystem_free_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\"}) / node_filesystem_size_bytes{fstype!~\"tmpfs|ramfs|overlay|squashfs\"} * 100",
           "legendFormat": "{{mountpoint}}",
           "refId": "A"
         }

@@ -694,6 +694,53 @@ rate(node_disk_written_bytes_total[5m])
 until it hits 100% and takes down the system. Alert at 80%. Disk I/O rate spikes
 that correlate with high `iowait` CPU confirm a disk bottleneck.
 
+**Docker volume mounts don't propagate submounts.** If node-exporter is running in
+a container, mounting `/:/rootfs:ro` only exposes the root filesystem device —
+separate block devices mounted *on top of* directories (e.g. `/storage`, `/boot/efi`)
+don't come along. node-exporter reads `/proc/mounts` and knows those filesystems
+exist, but it can't `statvfs()` them because the paths aren't accessible in the
+container's mount namespace. The result: only the root filesystem shows up in
+disk space metrics, everything else is silently missing.
+
+The fix is `rslave` bind propagation on the rootfs volume:
+
+```yaml
+# docker-compose.yml
+volumes:
+  - type: bind
+    source: /
+    target: /rootfs
+    read_only: true
+    bind:
+      propagation: rslave  # mirrors host submounts into the container
+command:
+  - "--path.rootfs=/rootfs"
+```
+
+`rslave` tells the kernel to mirror any mounts under `/` into the container's
+`/rootfs` as they appear on the host. With `--path.rootfs=/rootfs`, node-exporter
+prefixes all filesystem paths with `/rootfs` before calling `statvfs()`, so it
+can reach `/rootfs/storage`, `/rootfs/boot/efi`, etc.
+
+**Filtering out RAM-backed and virtual filesystems.** Once rslave propagation is
+enabled, node-exporter will report every mounted filesystem — including ones you
+don't care about. Two categories to filter:
+
+- **`tmpfs`** — RAM-backed, ephemeral. Used by the kernel for `/run`, `/dev/shm`,
+  `/run/lock`, and per-user `/run/user/<uid>` directories. No physical disk involved;
+  data is gone on reboot. Not useful to monitor for disk pressure.
+
+- **`ramfs`** — also RAM-backed, like tmpfs but without a size limit. Used by
+  systemd's **credentials** feature: when a sandboxed service needs a secret (API
+  key, password), systemd mounts it as ramfs at
+  `/run/credentials/<service-name>/`. These mounts live in the **service's private
+  mount namespace**, so they don't appear in `df -h` run from your shell (which
+  sees your own mount namespace), but node-exporter reads from PID 1's mount
+  namespace via `/proc/mounts` and sees them. Filtering `ramfs` removes them.
+
+The dashboard query uses `fstype!~"tmpfs|ramfs|overlay|squashfs"` to exclude all
+of these, leaving only real persistent storage devices.
+
 ### 8.4 Network
 
 ```promql
